@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/pprof"
 	"runtime"
+	_ "runtime/pprof"
 
 	"github.com/containous/mux"
 	"github.com/containous/traefik/autogen"
@@ -119,10 +121,16 @@ func (provider *Provider) Provide(configurationChan chan<- types.ConfigMessage, 
 	systemRouter.Methods("GET").PathPrefix(provider.Path + "dashboard/").
 		Handler(http.StripPrefix(provider.Path+"dashboard/", http.FileServer(&assetfs.AssetFS{Asset: autogen.Asset, AssetInfo: autogen.AssetInfo, AssetDir: autogen.AssetDir, Prefix: "static"})))
 
-	// expvars
-	if provider.Debug {
-		systemRouter.Methods("GET").Path(provider.Path + "debug/vars").HandlerFunc(expVarHandler)
-	}
+	systemRouter.Methods("GET").Path(provider.Path + "debug/vars").HandlerFunc(expVarHandler)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/").HandlerFunc(pprof.Index)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/cmdline").HandlerFunc(pprof.Cmdline)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/profile").HandlerFunc(pprof.Profile)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/symbol").HandlerFunc(pprof.Symbol)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/trace").HandlerFunc(pprof.Trace)
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/goroutine").Handler(pprof.Handler("goroutine"))
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/heap").Handler(pprof.Handler("heap"))
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/threadcreate").Handler(pprof.Handler("threadcreate"))
+	systemRouter.Methods("GET").Path(provider.Path + "debug/pprof/block").Handler(pprof.Handler("block"))
 
 	safe.Go(func() {
 		var err error
