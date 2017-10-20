@@ -1,8 +1,11 @@
-FROM golang:1.9-alpine
+FROM golang:1.9
 
-RUN apk --update upgrade \
-&& apk --no-cache --no-progress add git mercurial bash gcc musl-dev curl tar \
-&& rm -rf /var/cache/apk/*
+#RUN apk --update upgrade \
+#&& apk --no-cache --no-progress add git mercurial bash gcc musl-dev curl tar \
+#&& rm -rf /var/cache/apk/*
+
+RUN apt-get update  \
+&& apt-get install -y git mercurial bash gcc musl-dev curl tar
 
 RUN go get github.com/jteeuwen/go-bindata/... \
 && go get github.com/golang/lint/golint \
