@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 func TestProvideSingleFileAndWatch(t *testing.T) {
 	tempDir := createTempDir(t, "testfile")
 	defer os.RemoveAll(tempDir)
-
+	expMutex := &sync.Mutex{}
 	expectedNumFrontends := 2
 	expectedNumBackends := 2
 
@@ -26,7 +27,7 @@ func TestProvideSingleFileAndWatch(t *testing.T) {
 		createFrontendConfiguration(expectedNumFrontends),
 		createBackendConfiguration(expectedNumBackends))
 
-	configurationChan, signal := createConfigurationRoutine(t, &expectedNumFrontends, &expectedNumBackends)
+	configurationChan, signal := createConfigurationRoutine(t, expMutex, &expectedNumFrontends, &expectedNumBackends)
 
 	provide(configurationChan, watch, withFile(tempFile))
 
@@ -35,8 +36,10 @@ func TestProvideSingleFileAndWatch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Now test again with single frontend and backend
+	expMutex.Lock()
 	expectedNumFrontends = 1
 	expectedNumBackends = 1
+	expMutex.Unlock()
 
 	createFile(t,
 		tempDir, "simple.toml",
@@ -52,6 +55,7 @@ func TestProvideSingleFileAndNotWatch(t *testing.T) {
 	tempDir := createTempDir(t, "testfile")
 	defer os.RemoveAll(tempDir)
 
+	expMutex := &sync.Mutex{}
 	expectedNumFrontends := 2
 	expectedNumBackends := 2
 
@@ -60,7 +64,7 @@ func TestProvideSingleFileAndNotWatch(t *testing.T) {
 		createFrontendConfiguration(expectedNumFrontends),
 		createBackendConfiguration(expectedNumBackends))
 
-	configurationChan, signal := createConfigurationRoutine(t, &expectedNumFrontends, &expectedNumBackends)
+	configurationChan, signal := createConfigurationRoutine(t, expMutex, &expectedNumFrontends, &expectedNumBackends)
 
 	provide(configurationChan, withFile(tempFile))
 
@@ -69,8 +73,10 @@ func TestProvideSingleFileAndNotWatch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Now test again with single frontend and backend
+	expMutex.Lock()
 	expectedNumFrontends = 1
 	expectedNumBackends = 1
+	expMutex.Unlock()
 
 	createFile(t,
 		tempDir, "simple.toml",
@@ -86,13 +92,14 @@ func TestProvideDirectoryAndWatch(t *testing.T) {
 	tempDir := createTempDir(t, "testdir")
 	defer os.RemoveAll(tempDir)
 
+	expMutex := &sync.Mutex{}
 	expectedNumFrontends := 2
 	expectedNumBackends := 2
 
 	tempFile1 := createRandomFile(t, tempDir, createFrontendConfiguration(expectedNumFrontends))
 	tempFile2 := createRandomFile(t, tempDir, createBackendConfiguration(expectedNumBackends))
 
-	configurationChan, signal := createConfigurationRoutine(t, &expectedNumFrontends, &expectedNumBackends)
+	configurationChan, signal := createConfigurationRoutine(t, expMutex, &expectedNumFrontends, &expectedNumBackends)
 
 	provide(configurationChan, watch, withDirectory(tempDir))
 
@@ -101,15 +108,21 @@ func TestProvideDirectoryAndWatch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Now remove the backends file
+	expMutex.Lock()
 	expectedNumFrontends = 2
 	expectedNumBackends = 0
+	expMutex.Unlock()
+
 	os.Remove(tempFile2.Name())
 	err = waitForSignal(signal, 2*time.Second, "remove the backends file")
 	assert.NoError(t, err)
 
 	// Now remove the frontends file
+	expMutex.Lock()
 	expectedNumFrontends = 0
 	expectedNumBackends = 0
+	expMutex.Unlock()
+
 	os.Remove(tempFile1.Name())
 	err = waitForSignal(signal, 2*time.Second, "remove the frontends file")
 	assert.NoError(t, err)
@@ -119,13 +132,14 @@ func TestProvideDirectoryAndNotWatch(t *testing.T) {
 	tempDir := createTempDir(t, "testdir")
 	defer os.RemoveAll(tempDir)
 
+	expMutex := &sync.Mutex{}
 	expectedNumFrontends := 2
 	expectedNumBackends := 2
 
 	createRandomFile(t, tempDir, createFrontendConfiguration(expectedNumFrontends))
 	tempFile2 := createRandomFile(t, tempDir, createBackendConfiguration(expectedNumBackends))
 
-	configurationChan, signal := createConfigurationRoutine(t, &expectedNumFrontends, &expectedNumBackends)
+	configurationChan, signal := createConfigurationRoutine(t, expMutex, &expectedNumFrontends, &expectedNumBackends)
 
 	provide(configurationChan, withDirectory(tempDir))
 
@@ -134,8 +148,10 @@ func TestProvideDirectoryAndNotWatch(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Now remove the backends file
+	expMutex.Lock()
 	expectedNumFrontends = 2
 	expectedNumBackends = 0
+	expMutex.Unlock()
 	os.Remove(tempFile2.Name())
 
 	// Must fail because we don't watch the changes
@@ -144,17 +160,21 @@ func TestProvideDirectoryAndNotWatch(t *testing.T) {
 
 }
 
-func createConfigurationRoutine(t *testing.T, expectedNumFrontends *int, expectedNumBackends *int) (chan types.ConfigMessage, chan interface{}) {
+func createConfigurationRoutine(t *testing.T, expMutex *sync.Mutex, expectedNumFrontends *int, expectedNumBackends *int) (chan types.ConfigMessage, chan interface{}) {
 	configurationChan := make(chan types.ConfigMessage)
 	signal := make(chan interface{})
 
 	safe.Go(func() {
 		for {
-			data := <-configurationChan
-			assert.Equal(t, "file", data.ProviderName)
-			assert.Len(t, data.Configuration.Frontends, *expectedNumFrontends)
-			assert.Len(t, data.Configuration.Backends, *expectedNumBackends)
-			signal <- nil
+			func() {
+				data := <-configurationChan
+				expMutex.Lock()
+				defer expMutex.Unlock()
+				assert.Equal(t, "file", data.ProviderName)
+				assert.Len(t, data.Configuration.Frontends, *expectedNumFrontends)
+				assert.Len(t, data.Configuration.Backends, *expectedNumBackends)
+				signal <- nil
+			}()
 		}
 	})
 
