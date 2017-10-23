@@ -1,7 +1,9 @@
 package integration
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -25,7 +27,9 @@ func (s *SimpleSuite) TestInvalidConfigShouldFail(c *check.C) {
 
 	err = try.Do(500*time.Millisecond, func() error {
 		expected := "Near line 0 (last key parsed ''): bare keys cannot contain '{'"
-		actual := output.String()
+		out := &bytes.Buffer{}
+		io.Copy(out, output)
+		actual := out.String()
 
 		if !strings.Contains(actual, expected) {
 			return fmt.Errorf("Got %s, wanted %s", actual, expected)
@@ -69,7 +73,9 @@ func (s *SimpleSuite) TestDefaultEntryPoints(c *check.C) {
 
 	err = try.Do(500*time.Millisecond, func() error {
 		expected := "\"DefaultEntryPoints\":[\"http\"]"
-		actual := output.String()
+		out := &bytes.Buffer{}
+		io.Copy(out, output)
+		actual := out.String()
 
 		if !strings.Contains(actual, expected) {
 			return fmt.Errorf("Got %s, wanted %s", actual, expected)
@@ -90,7 +96,9 @@ func (s *SimpleSuite) TestPrintHelp(c *check.C) {
 	err = try.Do(500*time.Millisecond, func() error {
 		expected := "Usage:"
 		notExpected := "panic:"
-		actual := output.String()
+		out := &bytes.Buffer{}
+		io.Copy(out, output)
+		actual := out.String()
 
 		if strings.Contains(actual, notExpected) {
 			return fmt.Errorf("Got %s", actual)

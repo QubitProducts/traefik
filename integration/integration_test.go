@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"os"
@@ -99,12 +100,12 @@ func withConfigFile(file string) string {
 	return "--configFile=" + file
 }
 
-func (s *BaseSuite) cmdTraefik(args ...string) (*exec.Cmd, *bytes.Buffer) {
+func (s *BaseSuite) cmdTraefik(args ...string) (*exec.Cmd, io.Reader) {
 	cmd := exec.Command(traefikBinary, args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	return cmd, &out
+	var out, in = io.Pipe()
+	cmd.Stdout = in
+	cmd.Stderr = in
+	return cmd, out
 }
 
 func (s *BaseSuite) traefikCmd(args ...string) (*exec.Cmd, func(*check.C)) {
@@ -116,12 +117,14 @@ func (s *BaseSuite) traefikCmd(args ...string) (*exec.Cmd, func(*check.C)) {
 	}
 }
 
-func (s *BaseSuite) displayTraefikLog(c *check.C, output *bytes.Buffer) {
-	if output == nil || output.Len() == 0 {
+func (s *BaseSuite) displayTraefikLog(c *check.C, output io.Reader) {
+	out := &bytes.Buffer{}
+	io.Copy(out, output)
+	if len(out.Bytes()) == 0 {
 		log.Printf("%s: No Traefik logs.", c.TestName())
 	} else {
 		log.Printf("%s: Traefik logs: ", c.TestName())
-		log.Println(output.String())
+		log.Println(out.String())
 	}
 }
 
