@@ -123,6 +123,8 @@ func (s *ConsulCatalogSuite) TestSimpleConfiguration(c *check.C) {
 	err := cmd.Start()
 	c.Assert(err, checker.IsNil)
 	defer cmd.Process.Kill()
+	// Pause a little, for the port to be ready
+	time.Sleep(1 * time.Second)
 
 	// TODO validate : run on 80
 	// Expected a 404 as we did not configure anything
