@@ -322,6 +322,7 @@ func (s *ConsulSuite) skipTestGlobalConfigurationWithClientTLS(c *check.C) {
 func (s *ConsulSuite) TestCommandStoreConfig(c *check.C) {
 	s.setupConsul(c)
 	consulHost := s.composeProject.Container(c, "consul").NetworkSettings.IPAddress
+	time.Sleep(1 * time.Second)
 
 	cmd, display := s.traefikCmd(
 		"storeconfig",
@@ -332,7 +333,7 @@ func (s *ConsulSuite) TestCommandStoreConfig(c *check.C) {
 	c.Assert(err, checker.IsNil)
 
 	// wait for traefik finish without error
-	cmd.Wait()
+	cmd.Process.Wait()
 
 	//CHECK
 	checkmap := map[string]string{
@@ -406,10 +407,16 @@ func (s *ConsulSuite) TestDatastore(c *check.C) {
 	wg.Add(4)
 	go func() {
 		for i := 0; i < 100; i++ {
-			setter1, _, err := datastore1.Begin()
+			var err error
+			kvSource, err := staert.NewKvSource(store.CONSUL, []string{consulHost + ":8500"}, &store.Config{
+				ConnectionTimeout: 10 * time.Second,
+			}, "traefik")
+			datastore3, err := cluster.NewDataStore(ctx, *kvSource, &TestStruct{}, nil)
 			c.Assert(err, checker.IsNil)
-			err = setter1.Commit(&TestStruct{
-				String: "datastore1",
+			setter3, _, err := datastore3.Begin()
+			c.Assert(err, checker.IsNil)
+			err = setter3.Commit(&TestStruct{
+				String: "datastore3",
 				Int:    i,
 			})
 			c.Assert(err, checker.IsNil)
@@ -418,10 +425,16 @@ func (s *ConsulSuite) TestDatastore(c *check.C) {
 	}()
 	go func() {
 		for i := 0; i < 100; i++ {
-			setter2, _, err := datastore2.Begin()
+			var err error
+			kvSource, err := staert.NewKvSource(store.CONSUL, []string{consulHost + ":8500"}, &store.Config{
+				ConnectionTimeout: 10 * time.Second,
+			}, "traefik")
+			datastore4, err := cluster.NewDataStore(ctx, *kvSource, &TestStruct{}, nil)
 			c.Assert(err, checker.IsNil)
-			err = setter2.Commit(&TestStruct{
-				String: "datastore2",
+			setter4, _, err := datastore4.Begin()
+			c.Assert(err, checker.IsNil)
+			err = setter4.Commit(&TestStruct{
+				String: "datastore4",
 				Int:    i,
 			})
 			c.Assert(err, checker.IsNil)
@@ -430,14 +443,24 @@ func (s *ConsulSuite) TestDatastore(c *check.C) {
 	}()
 	go func() {
 		for i := 0; i < 100; i++ {
-			test1 := datastore1.Get().(*TestStruct)
+			kvSource, err := staert.NewKvSource(store.CONSUL, []string{consulHost + ":8500"}, &store.Config{
+				ConnectionTimeout: 10 * time.Second,
+			}, "traefik")
+			datastore3, err := cluster.NewDataStore(ctx, *kvSource, &TestStruct{}, nil)
+			c.Assert(err, checker.IsNil)
+			test1 := datastore3.Get().(*TestStruct)
 			c.Assert(test1, checker.NotNil)
 		}
 		wg.Done()
 	}()
 	go func() {
 		for i := 0; i < 100; i++ {
-			test2 := datastore2.Get().(*TestStruct)
+			kvSource, err := staert.NewKvSource(store.CONSUL, []string{consulHost + ":8500"}, &store.Config{
+				ConnectionTimeout: 10 * time.Second,
+			}, "traefik")
+			datastore4, err := cluster.NewDataStore(ctx, *kvSource, &TestStruct{}, nil)
+			c.Assert(err, checker.IsNil)
+			test2 := datastore4.Get().(*TestStruct)
 			c.Assert(test2, checker.NotNil)
 		}
 		wg.Done()
